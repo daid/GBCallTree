@@ -1,0 +1,3 @@
+DEFINES = {"VERSION": 0}
+MACROS = {}
+BASEPATH = ""

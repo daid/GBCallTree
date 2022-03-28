@@ -1,0 +1,193 @@
+<html>
+<head>
+<style>
+.comment { color: #006000; }
+.label { color: #000060; }
+.hex { color: #600060; }
+
+.linenr { display: inline-block; text-align: right; width:40px; color: #808080; user-select: none }
+</style>
+<script>
+
+var blocks;
+var files;
+var block_lookup = {};
+var file_lookup = {};
+var main_block = 0;
+var current_file_index = 0;
+var line_block_lookup = {}
+
+var req = new XMLHttpRequest()
+req.addEventListener("load", function() {
+    var data = JSON.parse(this.responseText);
+    blocks = data.blocks;
+    files = data.files;
+    for(var idx=0; idx<files.length; idx++) {
+        file_lookup[files[idx].f] = idx;
+        line_block_lookup[idx] = {}
+    }
+    for(var idx=0; idx<blocks.length; idx++)
+        blocks[idx].b = [];
+    for(var idx=0; idx<blocks.length; idx++) {
+        var block = blocks[idx];
+        line_block_lookup[block.f][block.l] = idx;
+        block_lookup[block.n] = idx;
+        if (block.u) {
+            for(var idx2 of block.u) {
+                blocks[idx2].b.push(idx)
+            }
+        }
+    }
+
+    var html = "<div style='max-height: 100%; display: flex; font-family: monospace; white-space: pre'>"
+    html += "<div style='max-height: 100%; overflow-y: scroll'>";
+    for(var idx=0; idx<files.length; idx++)
+        html += `<div><a href='#' onclick='showFile(${idx}); return false;'>${files[idx].f}</a></div>`;
+    html += "</div><div id='file' style='overflow-y: scroll; max-height: 100%'></div><div style='overflow-y: scroll; max-height: 100%'>";
+    html += "<div><input id='input' style='width:100%'></div><div id='info'></div></div></div>";
+    document.body.innerHTML = html;
+    document.getElementById('input').oninput = function(e) {
+        if (e.target.value in block_lookup) {
+            main_block = block_lookup[e.target.value];
+            showFile(current_file_index);
+            showInfo(main_block);
+        }
+    }
+    var p = location.hash.split("#");
+    if (p.length == 4) {
+        document.getElementById('input').value = p[3];
+        main_block = block_lookup[p[3]];
+        showFile(file_lookup[p[1]], parseInt(p[2]));
+        showInfo(main_block);
+    }
+});
+req.open("GET", "calltree.json")
+req.send()
+
+function showFile(idx, at_line)
+{
+    current_file_index = idx;
+    var req = new XMLHttpRequest()
+    req.addEventListener("load", function() {
+        var main_blocks = rmark(main_block);
+        var uniq_blocks = runiq(main_block, main_blocks);
+        var html = `<div>${files[idx].f}</div>`;
+        var nr = 1;
+        var lookup = line_block_lookup[idx];
+        var block_idx;
+        for(var line of this.responseText.split("\n")) {
+            var bg = (nr & 1) ? '#BBBBBB' : '#CCCCCC';
+            if (nr in lookup)
+                block_idx = lookup[nr];
+            if (main_blocks.has(block_idx)) {
+                if (uniq_blocks.has(block_idx))
+                    bg = (nr & 1) ? '#BBFFBB' : '#CCFFCC';
+                else
+                    bg = (nr & 1) ? '#FFFFBB' : '#FFFFCC';
+            } else if (blocks[main_block].b.indexOf(block_idx) > -1) {
+                bg = (nr & 1) ? '#CCBBCC' : '#DDCCDD';
+            }
+            if (at_line == nr)
+                bg = (nr & 1) ? '#FFBBBB' : '#FFCCCC';
+            html += `<div style='background-color: ${bg}'><span class='linenr'>${nr}:</span>${syntaxColor(line)}</div>`;
+            nr += 1;
+        }
+        document.getElementById('file').innerHTML = html;
+        if (at_line) {
+            document.getElementById('file').childNodes[at_line].scrollIntoView();
+        }
+        updateHash(at_line);
+    });
+    req.open("GET", files[idx].f);
+    req.send();
+}
+
+function showInfo(block_index) {
+    var b = blocks[block_index];
+    var html = `<div>${b.n}</div>`;
+    html += `<div><a href='#' onclick='showFile(${b.f}, ${b.l}); return false;'>${files[b.f].f}:${b.l}</a></div>`;
+    if (b.b.length) {
+        html += `<div>Used by</div>`;
+        for(var i of b.b) {
+            html += `<div><a href='#' onclick='showFile(${blocks[i].f}, ${blocks[i].l}); return false;'>${blocks[i].n} @${files[blocks[i].f].f}:${blocks[i].l}</a></div>`;
+        }
+    }
+    if (b.u) {
+        html += `<div>Using</div>`;
+        for(var i of b.u) {
+            html += `<div><a href='#' onclick='showFile(${blocks[i].f}, ${blocks[i].l}); return false;'>${blocks[i].n} @${files[blocks[i].f].f}:${blocks[i].l}</a></div>`;
+        }
+    }
+    document.getElementById('info').innerHTML = html;
+}
+
+function updateHash(line_at)
+{
+    line_at = line_at || 0;
+    location.hash = `#${files[current_file_index].f}#${line_at}#${blocks[main_block].n}`;
+}
+
+function rmark(block_index) {
+    var result = new Set();
+    result.add(block_index);
+    var todo = [block_index];
+    while(todo.length > 0) {
+        block_index = todo.pop();
+        var b = blocks[block_index];
+        if (b.u) {
+            for(var idx of b.u) {
+                if (!result.has(idx)) {
+                    result.add(idx);
+                    todo.push(idx);
+                }
+            }
+        }
+    }
+    return result;
+}
+
+function runiq(main_idx, set) {
+    var result = new Set(set);
+    for(var idx of result) {
+        if (idx != main_idx && !allIn(blocks[idx].b, set)) {
+            rremove(result, idx);
+        }
+    }
+    return result;
+}
+
+function rremove(set, idx) {
+    if (set.delete(idx) && blocks[idx].u) {
+        for(var i of blocks[idx].u)
+            rremove(set, i);
+    }
+}
+
+function allIn(list, set) {
+    for(var n of list)
+        if (!set.has(n))
+            return false;
+    return true;
+}
+
+function syntaxColor(line) {
+    var result = "";
+    if (line == "") return "";
+    for(var s of line.match(/( +)|(;.+)|\.?[a-zA-Z_][a-zA-Z_0-9]*|\$[0-9a-fA-F]+|./g)) {
+        if (s.startsWith(";"))
+            result += `<span class='comment'>${s}</span>`;
+        else if (s.startsWith("$"))
+            result += `<span class='hex'>${s}</span>`;
+        else if (s in block_lookup || s.startsWith("."))
+            result += `<span class='label'>${s}</span>`;
+        else
+            result += s;
+    }
+    return result;
+}
+
+</script>
+</head>
+<body>
+</body>
+</html>
