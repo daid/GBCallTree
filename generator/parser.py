@@ -15,7 +15,7 @@ def parseAddSub(tok):
         return t + parseAddSub(tok)
     if p.isA('OP', '-'):
         tok.pop()
-        return t - parseAddSub(tok)
+        return int(t) - parseAddSub(tok)
     if p.isA('OP', '&'):
         tok.pop()
         return t & parseAddSub(tok)
@@ -92,9 +92,31 @@ def parseValue(tok):
         return t.value in DEFINES
     if t.isA('ID', 'STRLEN'):
         tok.expect('OP', '(')
-        t = tok.expect('STRING')
+        t = str(parseExpr(tok))
         tok.expect('OP', ')')
-        return len(t.value)
+        return len(t)
+    if t.isA('ID', 'STRCMP'):
+        tok.expect('OP', '(')
+        s1 = str(parseExpr(tok))
+        tok.expect('OP', ',')
+        s2 = str(parseExpr(tok))
+        tok.expect('OP', ')')
+        if s1 < s2:
+            return -1
+        if s1 > s2:
+            return 1
+        return 0
+    if t.isA('ID', 'STRSUB'):
+        tok.expect('OP', '(')
+        s = str(parseExpr(tok))
+        tok.expect('OP', ',')
+        start = parseExpr(tok)
+        length = len(s)
+        if tok.peek().isA('OP', ','):
+            tok.pop()
+            length = parseExpr(tok)
+        tok.expect('OP', ')')
+        return s[start-1:start+length-1]
     if t.isA('ID') and t.value in {'HIGH', 'LOW'}:
         tok.expect('OP', '(')
         res = parseExpr(tok)

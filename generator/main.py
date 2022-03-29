@@ -71,7 +71,7 @@ def processfile(f):
             tok.expect('NEWLINE')
         elif t.isA('ID') and tok.peek().isA('ID', 'equs'):
             tok.expect('ID')
-            tok.expect('STRING')
+            parseExpr(tok)
             tok.expect('NEWLINE')
         elif t.isA('ID') and (tok.peek().isA('ID', 'equ') or tok.peek().isA('OP', '=')):
             if condition_list[-1]:
@@ -102,6 +102,7 @@ def processfile(f):
             if not args[-1]:
                 args.pop()
             tok.pushMacro(MACROS[t.value], args)
+            cur_block.addInstr("MACRO", [a for a in arg for arg in args])
         elif t.isA('ID') and (tok.peek().isA('LABEL') or t.value.startswith(".")):
             if tok.peek().isA('LABEL'):
                 tok.pop()
