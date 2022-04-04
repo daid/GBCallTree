@@ -15,7 +15,7 @@ def parseAddSub(tok):
         return t + parseAddSub(tok)
     if p.isA('OP', '-'):
         tok.pop()
-        return int(t) - parseAddSub(tok)
+        return int(t) - int(parseAddSub(tok))
     if p.isA('OP', '&'):
         tok.pop()
         return t & parseAddSub(tok)
@@ -90,6 +90,11 @@ def parseValue(tok):
         t = tok.expect('ID')
         tok.expect('OP', ')')
         return t.value in DEFINES
+    if t.isA('ID', 'ISCONST'):
+        tok.expect('OP', '(')
+        t = tok.pop()
+        tok.expect('OP', ')')
+        return t.kind == "NUMBER"
     if t.isA('ID', 'STRLEN'):
         tok.expect('OP', '(')
         t = str(parseExpr(tok))
@@ -117,6 +122,21 @@ def parseValue(tok):
             length = parseExpr(tok)
         tok.expect('OP', ')')
         return s[start-1:start+length-1]
+    if t.isA('ID', 'STRCAT'):
+        tok.expect('OP', '(')
+        result = parseExpr(tok)
+        while tok.peek().isA('OP', ','):
+            tok.pop()
+            result += str(parseExpr(tok))
+        tok.expect('OP', ')')
+        return result
+    if t.isA('ID', 'STRRIN'):
+        tok.expect('OP', '(')
+        hay = parseExpr(tok)
+        tok.expect('OP', ',')
+        needle = parseExpr(tok)
+        tok.expect('OP', ')')
+        return hay.rfind(needle) + 1
     if t.isA('ID') and t.value in {'HIGH', 'LOW'}:
         tok.expect('OP', '(')
         res = parseExpr(tok)
@@ -129,8 +149,8 @@ def parseValue(tok):
     if t.isA('ID') and t.value in DEFINES:
         return DEFINES[t.value]
     if t.isA('STRING'):
-        return 0
+        return t.value
     if t.isA('ID'):
         print('?', t)
-        return 0;
+        return 0
     raise SyntaxError(t)

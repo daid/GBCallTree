@@ -70,13 +70,35 @@ def processfile(f):
             condition_list.pop()
             tok.expect('NEWLINE')
         elif t.isA('ID') and tok.peek().isA('ID', 'equs'):
-            tok.expect('ID')
-            parseExpr(tok)
-            tok.expect('NEWLINE')
+            if condition_list[-1]:
+                tok.pop()
+                name = t.value
+                DEFINES[name] = parseExpr(tok)
+                print(name, "equs", DEFINES[name])
+                tok.expect('NEWLINE')
+            else:
+                while not tok.pop().isA('NEWLINE'):
+                    pass
+        elif t.isA('ID') and t.value.upper() in {"DEF", "REDEF"}:
+            if condition_list[-1]:
+                t = tok.expect('ID')
+                if tok.peek().isA('OP', '=') or tok.peek().isA('ID', 'equ'):
+                    tok.pop()
+                    DEFINES[t.value] = parseExpr(tok)
+                    print(t.value, "=", DEFINES[t.value])
+                elif tok.peek().isA('ID', 'equs'):
+                    tok.pop()
+                    DEFINES[t.value] = parseExpr(tok)
+                    print(t.value, "equs", DEFINES[t.value])
+                tok.expect('NEWLINE')
+            else:
+                while not tok.pop().isA('NEWLINE'):
+                    pass
         elif t.isA('ID') and (tok.peek().isA('ID', 'equ') or tok.peek().isA('OP', '=')):
             if condition_list[-1]:
                 tok.pop()
                 DEFINES[t.value] = parseExpr(tok)
+                print(t.value, "=", DEFINES[t.value])
                 tok.expect('NEWLINE')
             else:
                 while not tok.pop().isA('NEWLINE'):
@@ -110,9 +132,11 @@ def processfile(f):
                 macro = []
                 tok.pop()
                 tok.expect('NEWLINE')
-                while not tok.peek().isA('ID', 'endm'):
-                    macro.append(tok.pop());
-                tok.pop();
+                while True:
+                    line = tok.popRawLine()
+                    if line[2].upper().strip() == "ENDM":
+                        break
+                    macro.append((t.value, line[1], line[2]));
                 MACROS[t.value] = macro
             elif condition_list[-1] and not re.match(r"\._[0-9A-F][0-9A-F]", t.value):
                 cur_block = Block(f, t.line_nr, t.value, cur_block)

@@ -3,6 +3,16 @@ import os
 import json
 import glob
 
+import globals
+
+
+def replaceSymIn(m):
+    value = m.group(1)
+    if value in globals.DEFINES:
+        return str(globals.DEFINES[value])
+    print("Unknown symbol interpolation:", value)
+    return ""
+
 
 class Token:
     def __init__(self, kind, value, line_nr):
@@ -33,7 +43,6 @@ class Tokenizer:
         ('STRING', '[a-zA-Z]?"[^"]*"'),
         ('ID', r'\.?[A-Za-z_][A-Za-z0-9_\.#]*'),
         ('OP', r'==|>=|<=|<<|>>|[+\-*/,\(\)!=<>\|&\^%]'),
-        ('MACROPARAM', r'\\[0-9]+'),
         ('REFOPEN', r'\['),
         ('REFCLOSE', r'\]'),
         ('NEWLINE', r'\n'),
@@ -42,13 +51,42 @@ class Tokenizer:
     ]))
 
     def __init__(self, code):
+        self.__lines = []
+        self.__macros = []
+        self.__counter = 0
+        for line_num, line in enumerate(code.split("\n")):
+            self.__lines.append(("", line_num, line))
         self.__tokens = []
-        line_num = 1
-        for mo in self.TOKEN_REGEX.finditer(code):
+
+    def __decodeNextLine(self):
+        if self.__macros:
+            if not self.__macros[0][0]:
+                self.__macros.pop(0)
+                return self.__decodeNextLine()
+            file, line_num, line = self.__macros[0][0].pop(0)
+            args = self.__macros[0][1]
+            def tstr(t):
+                if t.kind == "STRING":
+                    return "\"%s\"" % (t.value)
+                return str(t.value)
+            def f(m):
+                m = m.group(0)
+                if m == '\#':
+                    return ", ".join(["".join([tstr(a) for a in arg]) for arg in args])
+                if m == '\@':
+                    self.__counter += 1
+                    return "__%d" % (self.__counter)
+                return "".join([tstr(a) for a in args[int(m[1:])-1]])
+            line = re.sub(r'\\[0-9#@]', f, line)
+        else:
+            file, line_num, line = self.__lines.pop(0)
+        print(file, line_num, line)
+        line = re.sub(r'{([^}]+)}', replaceSymIn, line)
+        for mo in self.TOKEN_REGEX.finditer(line):
             kind = mo.lastgroup
             value = mo.group()
             if kind == 'MISMATCH':
-                print(code.split("\n")[line_num-1])
+                print(line)
                 raise RuntimeError("Syntax error on line: %d: %s\n%s", line_num, value)
             elif kind == 'SKIP':
                 pass
@@ -72,15 +110,21 @@ class Tokenizer:
                 elif kind == 'STRING':
                     value = value[1:-1]
                 self.__tokens.append(Token(kind, value, line_num))
-                if kind == 'NEWLINE':
-                    line_num += 1
         self.__tokens.append(Token('NEWLINE', '\n', line_num))
 
     def peek(self):
+        if not self.__tokens:
+            self.__decodeNextLine()
         return self.__tokens[0]
 
     def pop(self):
+        if not self.__tokens:
+            self.__decodeNextLine()
         return self.__tokens.pop(0)
+
+    def popRawLine(self):
+        assert not self.__tokens
+        return self.__lines.pop(0)
 
     def expect(self, kind, value=None):
         pop = self.pop()
@@ -91,19 +135,31 @@ class Tokenizer:
         return pop
 
     def __bool__(self):
-        return bool(self.__tokens)
+        return bool(self.__lines) or bool(self.__tokens)
 
-    def pushMacro(self, tokens, args):
-        to_add = []
-        for t in tokens:
-            if t.isA('MACROPARAM'):
-                if int(t.value[1:])-1 < len(args):
-                    for a in args[int(t.value[1:])-1]:
-                        a.line_nr = -1
-                        to_add.append(a)
-            elif t.isA('ID', '_NARG'):
-                to_add.append(Token('NUMBER', len(args), -1))
-            else:
-                t.line_nr = -1
-                to_add.append(t)
-        self.__tokens = to_add + self.__tokens
+    def pushMacro(self, lines, args):
+        self.__macros.insert(0, (lines.copy(), args))
+        return
+
+    def shiftMacroArgs(self, amount):
+        for n in range(amount):
+            self.__macros[0][1].pop(0)
+
+
+if __name__ == "__main__":
+    print("Testing tokenizer.")
+    Tokenizer("$10").expect("NUMBER", 16)
+    t = Tokenizer(";comment\n100")
+    t.expect("NEWLINE")
+    t.expect("NUMBER", 100)
+
+    t = Tokenizer("._{TEST}_123")
+    globals.DEFINES["TEST"] = "BLA"
+    t.expect("ID", "._BLA_123")
+
+    t = Tokenizer("")
+    t.pushMacro([("", -1, r"\1"), ("", -1, r"\1")], [[Token("NUMBER", 1, -1)], [Token("NUMBER", 2, -1)]])
+    t.expect("NUMBER", 1)
+    t.expect("NEWLINE")
+    t.shiftMacroArgs(1)
+    t.expect("NUMBER", 2)
