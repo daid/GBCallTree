@@ -80,7 +80,7 @@ class Tokenizer:
             line = re.sub(r'\\[0-9#@]', f, line)
         else:
             file, line_num, line = self.__lines.pop(0)
-        print(file, line_num, line)
+        # print(file, line_num, line)
         line = re.sub(r'{([^}]+)}', replaceSymIn, line)
         for mo in self.TOKEN_REGEX.finditer(line):
             kind = mo.lastgroup

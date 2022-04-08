@@ -74,7 +74,7 @@ def processfile(f):
                 tok.pop()
                 name = t.value
                 DEFINES[name] = parseExpr(tok)
-                print(name, "equs", DEFINES[name])
+                #print(name, "equs", DEFINES[name])
                 tok.expect('NEWLINE')
             else:
                 while not tok.pop().isA('NEWLINE'):
@@ -85,11 +85,11 @@ def processfile(f):
                 if tok.peek().isA('OP', '=') or tok.peek().isA('ID', 'equ'):
                     tok.pop()
                     DEFINES[t.value] = parseExpr(tok)
-                    print(t.value, "=", DEFINES[t.value])
+                    #print(t.value, "=", DEFINES[t.value])
                 elif tok.peek().isA('ID', 'equs'):
                     tok.pop()
                     DEFINES[t.value] = parseExpr(tok)
-                    print(t.value, "equs", DEFINES[t.value])
+                    #print(t.value, "equs", DEFINES[t.value])
                 tok.expect('NEWLINE')
             else:
                 while not tok.pop().isA('NEWLINE'):
@@ -98,7 +98,7 @@ def processfile(f):
             if condition_list[-1]:
                 tok.pop()
                 DEFINES[t.value] = parseExpr(tok)
-                print(t.value, "=", DEFINES[t.value])
+                #print(t.value, "=", DEFINES[t.value])
                 tok.expect('NEWLINE')
             else:
                 while not tok.pop().isA('NEWLINE'):
@@ -125,6 +125,17 @@ def processfile(f):
                 args.pop()
             tok.pushMacro(MACROS[t.value], args)
             cur_block.addInstr("MACRO", [a for a in arg for arg in args])
+        elif t.isA('ID') and t.value.upper() == 'SHIFT':
+            if tok.peek().isA('NEWLINE'):
+                count = 1
+            else:
+                count = parseExpr(tok)
+            tok.shiftMacroArgs(count)
+        elif t.isA('ID') and t.value.upper() == 'PURGE':
+            name = tok.expect('ID').value
+            if name in DEFINES:
+                del DEFINES[name]
+            tok.expect('NEWLINE')
         elif t.isA('ID') and (tok.peek().isA('LABEL') or t.value.startswith(".")):
             if tok.peek().isA('LABEL'):
                 tok.pop()
@@ -174,6 +185,7 @@ if __name__ == "__main__":
     parser.add_argument('files', nargs='+')
     parser.add_argument('--basepath', default=os.getcwd())
     parser.add_argument('--output', required=True)
+    parser.add_argument('--ignore', nargs='*', help='Ignore jumps to specific symbols. This is useful to ignore hard resets to the reset vector')
     args = parser.parse_args()
     BASEPATH = args.basepath
     for file in args.files:
@@ -200,7 +212,7 @@ if __name__ == "__main__":
     block_index = {d["n"]: idx for idx, d in enumerate(block_json)}
     for label, block in BLOCKS.items():
         if block.uses:
-            block_json[block_index[label]]["u"] = [block_index[b.label] for b in block.uses]
+            block_json[block_index[label]]["u"] = [block_index[b.label] for b in block.uses if b.label not in args.ignore]
     for f in file_json:
         f["f"] = os.path.relpath(f["f"], BASEPATH)
         os.makedirs(os.path.dirname(os.path.join(args.output, f["f"])), exist_ok=True)
