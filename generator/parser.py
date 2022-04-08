@@ -55,6 +55,9 @@ def parseCompare(tok):
     if p.isA('OP', '=='):
         tok.pop()
         return t == parseCompare(tok)
+    if p.isA('OP', '!='):
+        tok.pop()
+        return t != parseCompare(tok)
     if p.isA('OP', '>='):
         tok.pop()
         return t >= parseCompare(tok)

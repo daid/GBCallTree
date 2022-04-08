@@ -42,7 +42,7 @@ class Tokenizer:
         ('DIRECTIVE', r'#[A-Za-z_]+'),
         ('STRING', '[a-zA-Z]?"[^"]*"'),
         ('ID', r'\.?[A-Za-z_][A-Za-z0-9_\.#]*'),
-        ('OP', r'==|>=|<=|<<|>>|[+\-*/,\(\)!=<>\|&\^%]'),
+        ('OP', r'==|!=|>=|<=|<<|>>|[+\-*/,\(\)!=<>\|&\^%]'),
         ('REFOPEN', r'\['),
         ('REFCLOSE', r'\]'),
         ('NEWLINE', r'\n'),
@@ -55,7 +55,7 @@ class Tokenizer:
         self.__macros = []
         self.__counter = 0
         for line_num, line in enumerate(code.split("\n")):
-            self.__lines.append(("", line_num, line))
+            self.__lines.append(("", line_num + 1, line))
         self.__tokens = []
 
     def __decodeNextLine(self):
