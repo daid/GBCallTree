@@ -48,6 +48,14 @@ def parseShift(tok):
     if p.isA('OP', '<<'):
         tok.pop()
         return t << parseShift(tok)
+    if p.isA('OP', '&&'):
+        tok.pop()
+        t2 = parseShift(tok)
+        return t and t2
+    if p.isA('OP', '||'):
+        tok.pop()
+        t2 = parseShift(tok)
+        return t or t2
     return t
 def parseCompare(tok):
     t = parseUnary(tok)
@@ -98,7 +106,7 @@ def parseValue(tok):
         t = tok.pop()
         tok.expect('OP', ')')
         return t.kind == "NUMBER"
-    if t.isA('ID', 'STRLEN'):
+    if t.isA('ID', 'STRLEN') or t.isA('ID', 'CHARLEN'):
         tok.expect('OP', '(')
         t = str(parseExpr(tok))
         tok.expect('OP', ')')
@@ -114,6 +122,15 @@ def parseValue(tok):
         if s1 > s2:
             return 1
         return 0
+    if t.isA('ID', 'STRRPL'):
+        tok.expect('OP', '(')
+        s = str(parseExpr(tok))
+        tok.expect('OP', ',')
+        old = str(parseExpr(tok))
+        tok.expect('OP', ',')
+        new = str(parseExpr(tok))
+        tok.expect('OP', ')')
+        return s.replace(old, new)
     if t.isA('ID', 'STRSUB'):
         tok.expect('OP', '(')
         s = str(parseExpr(tok))

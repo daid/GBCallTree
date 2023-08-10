@@ -90,6 +90,9 @@ def processfile(f):
                     tok.pop()
                     DEFINES[t.value] = parseExpr(tok)
                     #print(t.value, "equs", DEFINES[t.value])
+                elif tok.peek().isA('ID', 'RB'):
+                    tok.pop()
+                    parseExpr(tok)
                 tok.expect('NEWLINE')
             else:
                 while not tok.pop().isA('NEWLINE'):
@@ -153,6 +156,16 @@ def processfile(f):
                 cur_block = Block(f, t.line_nr, t.value, cur_block)
                 assert cur_block.label not in BLOCKS, cur_block.label
                 BLOCKS[cur_block.label] = cur_block
+        elif t.isA('ID', 'MACRO'):
+            macro = []
+            t = tok.pop()
+            tok.expect('NEWLINE')
+            while True:
+                line = tok.popRawLine()
+                if line[2].upper().strip() == "ENDM":
+                    break
+                macro.append((t.value, line[1], line[2]));
+            MACROS[t.value] = macro
         elif t.isA('ID') and t.value.upper() in {'DB', 'DW', 'DS'}: # data
             params = []
             while not tok.peek().isA('NEWLINE'):

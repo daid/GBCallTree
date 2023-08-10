@@ -32,7 +32,7 @@ class Token:
 class Tokenizer:
     TOKEN_REGEX = re.compile('|'.join('(?P<%s>%s)' % pair for pair in [
         ('NUMBER', r'\d+(\.\d*)?'),
-        ('HEX', r'\$[0-9A-Fa-f]+'),
+        ('HEX', r'[\$#][0-9A-Fa-f]+'),
         ('GFX', r'\`[0-3]+'),
         ('BIN', r'\%[01]+'),
         ('ASSIGN', r':='),
@@ -40,9 +40,10 @@ class Tokenizer:
         ('LABEL', r':+'),
         ('CURSOR', r'@'),
         ('DIRECTIVE', r'#[A-Za-z_]+'),
-        ('STRING', '[a-zA-Z]?"[^"]*"'),
+        ('MACROARG', r'\\[0-9]'),
+        ('STRING', '[a-zA-Z]?"(?:[^"]|\\")*"'),
         ('ID', r'\.?[A-Za-z_][A-Za-z0-9_\.#]*'),
-        ('OP', r'==|!=|>=|<=|<<|>>|[+\-*/,\(\)!=<>\|&\^%]'),
+        ('OP', r'&&|\|\||==|!=|>=|<=|<<|>>|[+\-*/,\(\)!=<>\|&\^%~]'),
         ('REFOPEN', r'\['),
         ('REFCLOSE', r'\]'),
         ('NEWLINE', r'\n'),
@@ -64,6 +65,8 @@ class Tokenizer:
                 self.__macros.pop(0)
                 return self.__decodeNextLine()
             file, line_num, line = self.__macros[0][0].pop(0)
+            while line.endswith('\\'):
+                line = line[:-1] + self.__macros[0][0].pop(0)[2]
             args = self.__macros[0][1]
             def tstr(t):
                 if t.kind == "STRING":
@@ -76,10 +79,14 @@ class Tokenizer:
                 if m == '\@':
                     self.__counter += 1
                     return "__%d" % (self.__counter)
-                return "".join([tstr(a) for a in args[int(m[1:])-1]])
+                if args:
+                    return "".join([tstr(a) for a in args[int(m[1:])-1]])
+                return ""
             line = re.sub(r'\\[0-9#@]', f, line)
         else:
             file, line_num, line = self.__lines.pop(0)
+            while line.endswith('\\'):
+                line = line[:-1] + self.__lines.pop(0)[2]
         # print(file, line_num, line)
         line = re.sub(r'{([^}]+)}', replaceSymIn, line)
         for mo in self.TOKEN_REGEX.finditer(line):
